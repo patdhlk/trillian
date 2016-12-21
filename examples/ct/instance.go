@@ -3,6 +3,7 @@ package ct
 import (
 	"encoding/json"
 	"errors"
+	"expvar"
 	"fmt"
 	"io/ioutil"
 	"time"
@@ -20,6 +21,27 @@ type LogConfig struct {
 	PubKeyPEMFile   string
 	PrivKeyPEMFile  string
 	PrivKeyPassword string
+}
+
+var (
+	logVars = expvar.NewMap("logs")
+)
+
+// LogStats matches the schema of the exported JSON stats for a particular log instance.
+type LogStats struct {
+	LogID            int                       `json:"log-id"`
+	LastSCTTimestamp int                       `json:"last-sct-timestamp"`
+	LastSTHTimestamp int                       `json:"last-sth-timestamp"`
+	LastSTHTreesize  int                       `json:"last-sth-treesize"`
+	HTTPAllReqs      int                       `json:"http-all-reqs"`
+	HTTPAllRsps      map[string]int            `json:"http-all-rsps"` // status => count
+	HTTPReq          map[string]int            `json:"http-reqs"`     // entrypoint => count
+	HTTPRsps         map[string]map[string]int `json:"http-rsps"`     // entrypoint => status => count
+}
+
+// AllStats matches the schema of the entire exported JSON stats.
+type AllStats struct {
+	Logs map[string]LogStats `json:"logs"`
 }
 
 // LogConfigFromFile creates a slice of LogConfig options from the given
@@ -85,6 +107,7 @@ func (cfg LogConfig) SetUpInstance(client trillian.TrillianLogClient, deadline t
 	// Create and register the handlers using the RPC client we just set up
 	ctx := NewLogContext(cfg.LogID, cfg.Prefix, roots, client, km, deadline, new(util.SystemTimeSource))
 	ctx.RegisterHandlers(cfg.Prefix)
+	logVars.Set(cfg.Prefix, ctx.exp.vars)
 
 	return nil
 }
